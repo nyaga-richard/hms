@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Printer, Plus, Wallet, Undo2, ArrowRightLeft, Lock, Split, FileText } from 'lucide-react';
+import { Plus, Wallet, Undo2, ArrowRightLeft, Lock, Split, FileText } from 'lucide-react';
 import { post } from '@/lib/api';
 import { useApi, useAction } from '@/lib/query';
 import { useAuth } from '@/lib/auth';
@@ -13,6 +13,7 @@ import { ConfirmDialog, FormDialog } from '@/components/shared/form';
 import { Modal } from '@/components/ui/dialog';
 import { fmtDate, fmtDateTime, fmtMoney, titleCase, cn } from '@/lib/utils';
 import { PaymentLineFields, type PaymentLine } from './payment-fields';
+import { PrintButton, FolioDoc } from '@/lib/print';
 
 const CHARGE_CATEGORIES = ['ROOM', 'FOOD', 'BEVERAGE', 'MINIBAR', 'LAUNDRY', 'SPA', 'TELEPHONE', 'TRANSPORT', 'MISC', 'DAMAGE', 'LATE_CHECKOUT', 'EXTRA_BED', 'SERVICE', 'EVENT'];
 /** Ledger-style folio: charges (+) and payments (−) in posting order with running balance, reversal & transfer actions. */
@@ -34,7 +35,8 @@ export function FolioView({ folioId, compact }: { folioId: string; compact?: boo
     <tbody className="divide-y">{items.map((i) => { const amt = Number(i.amount); running += i.is_reversed || i.reverses_id ? Number(i.amount) : amt; const dead = i.is_reversed; return <tr key={i.id} className={cn('hover:bg-accent/40', dead && 'text-muted-foreground line-through decoration-muted-foreground/60', i.reverses_id && 'text-muted-foreground')}>{open && can('folios.transfer') && <td className="px-2"><Checkbox checked={sel.includes(i.id)} disabled={dead || !!i.reverses_id} onCheckedChange={(v) => setSel((s) => (v ? [...s, i.id] : s.filter((x) => x !== i.id)))} /></td>}<td className="px-3 py-1.5 whitespace-nowrap">{fmtDate(i.business_date)}<div className="text-[10px] text-muted-foreground">#{i.line_no}</div></td><td className="px-3 py-1.5"><div>{i.description}</div><div className="text-[11px] text-muted-foreground">{i.quantity > 1 ? `${i.quantity} × ${fmtMoney(i.unit_price, currency)} · ` : ''}{Number(i.tax_amount) > 0 ? `incl. tax ${fmtMoney(i.tax_amount, currency)} · ` : ''}{i.posted_by_name ?? ''} {fmtDateTime(i.posted_at)}{i.reason ? ` · ${i.reason}` : ''}</div></td><td className="px-3 py-1.5 hidden md:table-cell"><Badge tone="muted">{titleCase(i.category)}</Badge></td><td className="px-3 py-1.5 text-right tabular">{amt > 0 ? fmtMoney(amt, currency) : ''}</td><td className="px-3 py-1.5 text-right tabular">{amt < 0 ? fmtMoney(-amt, currency) : ''}</td><td className="px-3 py-1.5 text-right tabular font-medium">{fmtMoney(running, currency)}</td><td className="px-1 whitespace-nowrap">{open && !dead && !i.reverses_id && <>{can('folios.reverse') && <Button size="icon" variant="ghost" className="h-7 w-7" title="Reverse" onClick={() => setReverse(i)}><Undo2 className="h-3.5 w-3.5" /></Button>}{can('folios.transfer') && amt > 0 && <Button size="icon" variant="ghost" className="h-7 w-7" title="Transfer to another folio" onClick={() => setTransfer(i)}><ArrowRightLeft className="h-3.5 w-3.5" /></Button>}</>}</td></tr>; })}</tbody>
     <tfoot className="bg-muted/30 font-medium"><tr><td colSpan={open && can('folios.transfer') ? 4 : 3} className="px-3 py-2 text-right">Totals</td><td className="px-3 py-2 text-right tabular">{fmtMoney(f.totals?.charges, currency)}</td><td className="px-3 py-2 text-right tabular">{fmtMoney(f.totals?.credits, currency)}</td><td className={cn('px-3 py-2 text-right tabular', Number(f.totals?.balance) > 0 ? 'text-destructive' : 'text-emerald-600')}>{fmtMoney(f.totals?.balance, currency)}</td><td /></tr></tfoot></table></div>;
   const actions = <>
-    {!compact && <Button variant="outline" onClick={() => window.print()}><Printer />Print</Button>}
+    {!compact && <PrintButton doc="folio" title={`Folio ${f.number}`} render={(ctx) => <FolioDoc folio={f} ctx={ctx} />} />}
+    {compact && <PrintButton doc="folio" size="icon" variant="ghost" title={`Folio ${f.number}`} render={(ctx) => <FolioDoc folio={f} ctx={ctx} />} />}
     {open && can('folios.post') && <Button variant="outline" onClick={() => setCharge(true)}><Plus />Charge</Button>}
     {open && can('payments.create') && <Button onClick={() => setPay(true)}><Wallet />Payment</Button>}
     {open && sel.length > 0 && can('folios.transfer') && <Button variant="outline" onClick={() => setSplit(true)}><Split />Split {sel.length} item(s)</Button>}
@@ -42,7 +44,7 @@ export function FolioView({ folioId, compact }: { folioId: string; compact?: boo
   </>;
   const header = compact ? <div className="flex items-center justify-between mb-2"><div className="font-medium flex items-center gap-2"><FileText className="h-4 w-4" /><Link href={`/front-office/folios/${f.id}`} className="hover:underline">Folio {f.number}</Link> <StatusBadge status={f.status} /><Badge tone="muted">{f.type}</Badge></div><div className="flex gap-1">{actions}</div></div>
     : <PageHeader crumbs={[{ label: 'Front office', href: '/front-office' }, { label: 'Folios', href: '/front-office/folios' }, { label: f.number }]} title={<span className="flex items-center gap-2">Folio {f.number} <StatusBadge status={f.status} /><Badge tone="muted">{f.type}</Badge></span>} subtitle={<span>{f.guest_name ?? f.customer_name}{f.room_number ? ` · Room ${f.room_number}` : ''}{f.stay_id ? <> · <Link className="text-primary hover:underline" href={`/front-office/stays/${f.stay_id}`}>stay</Link></> : ''}{f.reservation_number ? ` · ${f.reservation_number}` : ''} · {f.currency}</span>} actions={actions} />;
-  return <div className="space-y-3 print:space-y-1">
+  return <div className="space-y-3">
     {header}
     {!compact && <div className="grid grid-cols-2 md:grid-cols-5 gap-3 text-sm">{Object.entries(f.by_category ?? {}).slice(0, 4).map(([k, v]: any) => <div key={k} className="rounded-md border p-2"><div className="text-[11px] uppercase text-muted-foreground">{titleCase(k)}</div><div className="font-semibold tabular">{fmtMoney(v, currency)}</div></div>)}<div className="rounded-md border p-2"><div className="text-[11px] uppercase text-muted-foreground">Tax / service</div><div className="font-semibold tabular">{fmtMoney(f.tax_total, currency)} / {fmtMoney(f.service_charge_total, currency)}</div></div></div>}
     {table}

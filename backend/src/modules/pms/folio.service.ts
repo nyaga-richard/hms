@@ -175,8 +175,8 @@ export async function transferFolioItem(client: PoolClient, itemId: string, toFo
 
 export async function folioDetail(folioId: string) {
   const folio = (await pool.query(
-    `SELECT f.*, g.first_name || ' ' || g.last_name AS guest_name, g.vip_level, c.name AS customer_name, r.number AS room_number, s.check_in_at, s.expected_check_out, s.status AS stay_status, res.number AS reservation_number
-       FROM folios f LEFT JOIN guests g ON g.id=f.guest_id LEFT JOIN customers c ON c.id=f.customer_id LEFT JOIN stays s ON s.id=f.stay_id LEFT JOIN rooms r ON r.id=s.room_id LEFT JOIN reservations res ON res.id=f.reservation_id WHERE f.id=$1`, [folioId])).rows[0];
+    `SELECT f.*, g.first_name || ' ' || g.last_name AS guest_name, g.vip_level, g.phone AS guest_phone, g.email AS guest_email, g.address AS guest_address, g.city AS guest_city, g.country AS guest_country, g.company_name AS guest_company, g.id_type AS guest_id_type, g.id_number AS guest_id_number, c.name AS customer_name, c.address AS customer_address, c.tax_number AS customer_tax_number, c.email AS customer_email, c.phone AS customer_phone, r.number AS room_number, rt.name AS room_type_name, s.check_in_at, s.expected_check_out, s.check_out_at, s.adults, s.children, s.status AS stay_status, res.number AS reservation_number, res.arrival_date, res.departure_date
+       FROM folios f LEFT JOIN guests g ON g.id=f.guest_id LEFT JOIN customers c ON c.id=f.customer_id LEFT JOIN stays s ON s.id=f.stay_id LEFT JOIN rooms r ON r.id=s.room_id LEFT JOIN room_types rt ON rt.id=r.room_type_id LEFT JOIN reservations res ON res.id=f.reservation_id WHERE f.id=$1`, [folioId])).rows[0];
   if (!folio) throw new NotFound('Folio not found');
   const items = (await pool.query(`SELECT fi.*, u.full_name AS posted_by_name FROM folio_items fi LEFT JOIN users u ON u.id=fi.posted_by WHERE fi.folio_id=$1 ORDER BY fi.line_no`, [folioId])).rows;
   const totals = await folioBalance(pool, folioId);

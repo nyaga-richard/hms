@@ -39,4 +39,13 @@
   .touch-target { @apply min-h-[44px] min-w-[44px]; }
   .tabular { font-variant-numeric: tabular-nums; }
 }
-@media print { .no-print { display: none !important; } body { background: white; } }
+/* Fallback for a bare browser Print (Ctrl+P) on any app page: hide chrome, print the main content only.
+   Documents (receipts, folios, KOTs…) never rely on this — they render into an isolated print document (see lib/print). */
+@media print {
+  .no-print, aside, header, nav, [data-radix-popper-content-wrapper], [role="tooltip"] { display: none !important; }
+  html, body { background: #fff !important; color: #000 !important; }
+  main { padding: 0 !important; margin: 0 !important; max-width: none !important; overflow: visible !important; }
+  .overflow-auto, .overflow-y-auto, .overflow-x-auto { overflow: visible !important; max-height: none !important; }
+  [role="dialog"] { position: static !important; transform: none !important; max-height: none !important; overflow: visible !important; box-shadow: none !important; }
+  a { text-decoration: none; }
+}

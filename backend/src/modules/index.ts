@@ -11,6 +11,7 @@ import { businessDaysRouter } from './finance/nightaudit.routes';
 import { venuesRouter, eventsRouter, servicesRouter, serviceResourcesRouter, serviceBookingsRouter, clubEventsRouter, staffShiftsRouter } from './events/events.routes';
 import { dashboardRouter, reportsRouter, searchRouter, attachmentsRouter, importsRouter, backupsRouter, systemRouter } from './platform/platform.routes';
 import { assetCategoriesRouter, assetsRouter } from './platform/assets.routes';
+import { printRouter } from './platform/print.routes';
 import { outletsRouter, restaurantsRouter, barsRouter, clubsRouter, kitchensRouter, tablesRouter, sectionsRouter, terminalsRouter, menusRouter, menuCategoriesRouter, menuItemsRouter, ordersRouter, kitchenRouter, shiftsRouter } from './fnb/fnb.routes';
 
 /** Module registry: each phase registers its routers here. */
@@ -78,6 +79,7 @@ export function registerModuleRoutes(api: Router) {
   api.use('/staff-shifts', staffShiftsRouter);
   // Platform: dashboard, reports, search, attachments, imports, backups, assets
   api.use('/dashboard', dashboardRouter);
+  api.use('/print', printRouter);
   api.use('/reports', reportsRouter);
   api.use('/search', searchRouter);
   api.use('/attachments', attachmentsRouter);

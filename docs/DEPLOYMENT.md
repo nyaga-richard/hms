@@ -27,6 +27,7 @@ Time to complete: about 45–60 minutes, most of it waiting for the first Docker
 15. [Appendix A — LAN access without Cloudflare (or in addition to it)](#15-appendix-a--lan-access-without-cloudflare-or-in-addition-to-it)
 16. [Appendix B — Environment variable reference](#16-appendix-b--environment-variable-reference)
 17. [Appendix C — Command cheat-sheet](#17-appendix-c--command-cheat-sheet)
+18. [Appendix D — Printer setup (A4 sheets and thermal rolls)](#18-appendix-d--printer-setup-a4-sheets-and-thermal-rolls)
 
 ---
 
@@ -337,6 +338,25 @@ You can revisit the configuration any time under *Networks → Tunnels → hms-p
 ```bash
 cd /opt/hms
 docker compose config --quiet && echo "compose file OK"     # validates .env substitution
+docker compose config --services                            # pre-flight: must list exactly these six
+```
+
+```
+postgres
+backend
+frontend
+nginx
+cloudflared
+db-backup
+```
+
+If the list is shorter, or you see an error such as `no configuration file provided: not found`, the two
+`COMPOSE_FILE` / `COMPOSE_PROFILES` lines in `.env` are missing or still commented out — fix them and re-run the
+check. (Older checkouts shipped the *development* stack as `docker-compose.yml`; a bare `docker compose up`
+would start that instead and try to publish PostgreSQL on host port 5432 — see
+[Troubleshooting](#13-troubleshooting).) Then:
+
+```bash
 docker compose up -d --build
 ```
 
@@ -406,7 +426,7 @@ This loads *Demo Hotel & Resort* with rooms, outlets, menus, stock and 18 users 
 ## 9. Step 8 — Verify end to end
 
 ```bash
-# 1. Inside the server: nginx and the API
+# 1. Inside the server: nginx and the API (use your HTTP_PORT if you changed it from 8080)
 curl -s http://127.0.0.1:8080/healthz ; echo                      # ok
 curl -s http://127.0.0.1:8080/api/health ; echo                   # {"ok":true,"service":"hms-backend",...}
 
@@ -581,7 +601,8 @@ docker system df && df -h /                     # disk usage
 | Tunnel flaps: "failed to dial to edge" / reconnect loops | UDP 7844 (QUIC) blocked by the ISP or router → set `CLOUDFLARE_TUNNEL_PROTOCOL=http2` and `docker compose up -d cloudflared`. Also check clock sync (`timedatectl`). |
 | Frontend build dies with `Killed` / exit code 137 | Out of memory. Add the 4 GB swap from section 2.5, or build on a bigger machine and push images to a registry. |
 | `permission denied … /var/run/docker.sock` | User not yet in the `docker` group in this session → `newgrp docker` or re-login. |
-| `bind: address already in use` for port 8080 | Something else listens on the host port → change `HTTP_PORT` in `.env`. |
+| `Bind for 0.0.0.0:8080 failed: port is already allocated` (nginx) | Another service on the host already uses that port — common on shared hosting boxes. Pick any free loopback port: `sudo ss -ltn 'sport = :8088'` (empty = free), then set `HTTP_BIND=127.0.0.1` and `HTTP_PORT=8088` in `.env` and `docker compose up -d`. `0.0.0.0` in the message means `HTTP_BIND` is not set in `.env` — add it. The tunnel never uses the host port (it reaches `nginx:80` inside the Docker network), so nothing else changes; just use the new port in the local `curl` checks. |
+| `Bind for 0.0.0.0:5432 failed: port is already allocated` and volumes `hms_node_modules` / `hms_next_cache` appear | The **development** stack was started instead of production (`COMPOSE_FILE` not set, older checkout still had `docker-compose.yml`). The prod stack never publishes 5432. Fix: `docker compose -f docker-compose.yml down -v --remove-orphans` (safe **only** before the first successful start — it deletes the still-empty volumes), uncomment `COMPOSE_FILE=docker-compose.prod.yml` and `COMPOSE_PROFILES=tunnel,backup` in `.env`, verify with `docker compose config --services`, then `docker compose up -d --build`. Whatever occupies 5432 (`sudo ss -ltnp 'sport = :5432'`, usually a host PostgreSQL) can stay. |
 | Login returns `RATE_LIMITED` for everyone | Whole property behind one NAT IP hit the per-IP limit → raise `RATE_LIMIT_LOGIN_PER_15MIN` / `RATE_LIMIT_API_PER_MINUTE`, `docker compose up -d backend`. |
 | `password authentication failed for user "hms"` after editing `POSTGRES_PASSWORD` | The DB keeps the original password. Either revert the value or run `docker compose exec postgres psql -U hms -d hms -c "ALTER USER hms PASSWORD '<new>';"` **before** restarting the backend. |
 | Wrong business date / times off by 3 h | Timezone. `DEFAULT_TIMEZONE=Africa/Nairobi` in `.env`, host `timedatectl`, then check *Finance → Night Audit*. |
@@ -692,3 +713,62 @@ git pull --ff-only && docker compose up -d --build && docker image prune -f   # 
 docker compose down                          # stop (volumes are kept)
 docker compose down -v                       # !!! stop AND DELETE all data volumes
 ```
+
+## 18. Appendix D — Printer setup (A4 sheets and thermal rolls)
+
+The application prints from the browser: every document (POS receipt/bill, kitchen & bar tickets, guest folio /
+invoice, reservation confirmation, purchase order, BEO, cashier shift report, club ticket, reports) is rendered
+into a **separate, isolated print document** sized for the chosen paper — never the on-screen page — so the sidebar,
+dialogs and scrollbars can never end up on paper. No print server, agent or driver plug-in is required.
+
+### 18.1 How paper is chosen
+
+| Level | Where | Applies to |
+|---|---|---|
+| Hotel default | **Settings → General → Printing**: *Receipts & bills*, *Kitchen / bar tickets*, *Folios, confirmations, POs, BEOs* (each A4 / A5 / Letter / 80 mm roll / 58 mm roll) | every terminal of the property |
+| Per-device override | the **▾ arrow next to any Print button** → choose a paper. The choice is remembered in that browser for that document type (badge on the button shows it). "Use hotel default" clears it. | that terminal only (e.g. the till with the receipt printer prints receipts on 80 mm, the office PC prints the same receipt on A4) |
+| One-off | the same menu → **Preview / save as PDF** opens the document in a new tab | emailing a folio, archiving |
+
+Reports always use A4 landscape unless a device override is set. Documents printed on rolls get a compact
+layout (narrower fonts, stacked columns) — they are not scaled-down A4 pages.
+
+### 18.2 Thermal receipt printer (80 mm or 58 mm, USB / LAN)
+
+1. Install the manufacturer driver (Epson TM series: *Advanced Printer Driver*; Xprinter / Rongta / generic
+   ESC/POS: the driver on the CD or the vendor site — a **Windows/macOS/CUPS printer** must exist, "generic text"
+   printing is not enough for a browser).
+2. In the OS printer preferences set the paper to **80 × 297 mm** (or *80 × 3276 mm* / "Roll Paper 80 x auto" if
+   the driver offers it). For 58 mm printers choose the **58 mm** paper, not 80 mm scaled.
+3. In the printer utility enable **"Reduce paper usage / Cut after content"** (Epson: *Paper Reduction → Bottom
+   margin: remove*; Xprinter: *Paper feed after print: 0*). This removes the blank feed after a short receipt — it
+   is a printer-driver option, browsers cannot control it.
+4. Chrome/Edge print dialog on the first print: *Destination* = the thermal printer, *Margins* = **None**,
+   *Scale* = 100 %, *Headers and footers* = off, *Background graphics* = on. Chrome remembers these per printer.
+5. Set the thermal printer as the **default printer** on POS tills so the dialog opens on the right device.
+
+**Silent printing (no dialog) on POS tills.** Launch Chrome/Edge with `--kiosk-printing` — e.g. Windows shortcut
+target `"C:\Program Files\Google\Chrome\Application\chrome.exe" --kiosk-printing --app=https://hms.example.com/pos`.
+Each print job then goes straight to the default printer with the last-used settings; combine with step 5.
+Kitchen tickets can be auto-printed when an order is sent (**Settings → Printing → Print kitchen tickets
+automatically**); with kiosk printing that gives a one-tap "send + print" workflow on the waiter terminal.
+
+Printers on the network: install them on each till as a normal network printer (TCP/IP 9100) — the browser
+does not talk to printers directly, the operating system does.
+
+### 18.3 A4 / laser printers
+
+Nothing special: choose the printer in the dialog, keep *Margins = Default* (the documents carry their own
+12 mm margins) and 100 % scale. Folios, confirmations, purchase orders and BEOs paginate automatically with
+repeated table headers. Set **Settings → Printing → Print the property logo** on and upload a logo under
+*Settings → Properties* to get a letterhead.
+
+### 18.4 Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Receipt prints on a full A4 page from the thermal printer | Driver paper size is A4 — set the roll size in the printer preferences (18.2 step 2) and choose *80 mm thermal roll* on the button's ▾ menu |
+| Long blank feed after each receipt | Enable "reduce paper / cut after content" in the printer utility (18.2 step 3) |
+| Text cut off on the right of a 58 mm receipt | The device is set to 80 mm — pick *58 mm thermal roll* in the ▾ menu (and 58 mm in the driver) |
+| Print dialog never appears / pop-up blocked | Allow pop-ups for the site (only needed when the browser blocks hidden print frames); Chrome/Edge/Firefox current versions need no change |
+| Wrong printer opens | Make the intended printer the OS default on that terminal; Chrome also remembers the last destination |
+| Logo or QR missing | Logo: property logo URL must be reachable from the terminal (upload it in Settings → Properties). QR codes are generated locally and never need network |

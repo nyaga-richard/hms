@@ -1,7 +1,7 @@
 'use client';
 import React, { useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { LogIn, Ban, UserX, Wallet, Pencil, Split, Printer } from 'lucide-react';
+import { LogIn, Ban, UserX, Wallet, Pencil, Split } from 'lucide-react';
 import { post, put } from '@/lib/api';
 import { useApi, useAction } from '@/lib/query';
 import { useAuth } from '@/lib/auth';
@@ -16,6 +16,7 @@ import { CheckInDialog } from '@/components/pms/checkin-dialog';
 import { PaymentLineFields, type PaymentLine } from '@/components/pms/payment-fields';
 import { Attachments } from '@/components/shared/attachments';
 import { AuditTrail } from '@/components/shared/audit-trail';
+import { PrintButton, ReservationDoc } from '@/lib/print';
 
 export default function ReservationDetail() {
   const { id } = useParams<{ id: string }>(); const router = useRouter(); const { can, currency } = useAuth();
@@ -31,7 +32,7 @@ export default function ReservationDetail() {
   return <div className="space-y-4">
     <PageHeader crumbs={[{ label: 'Front office', href: '/front-office' }, { label: 'Reservations', href: '/front-office/reservations' }, { label: r.number }]} title={<span className="flex items-center gap-2">{r.number} <StatusBadge status={r.status} />{r.is_overbooking && <Badge tone="destructive">Overbooked</Badge>}</span>} subtitle={`${r.guest_name} · ${fmtDate(r.arrival_date)} → ${fmtDate(r.departure_date)} · ${r.nights} night(s)`}
       actions={<>
-        <Button variant="outline" onClick={() => window.print()}><Printer />Print</Button>
+        <PrintButton doc="confirmation" label="Confirmation" title={`Reservation ${r.number}`} render={(ctx) => <ReservationDoc r={r} ctx={ctx} />} />
         {active && can('reservations.modify') && <Button variant="outline" onClick={() => setEdit(true)}><Pencil />Modify</Button>}
         {active && can('payments.create') && <Button variant="outline" onClick={() => setDep(true)}><Wallet />Deposit</Button>}
         {active && can('reservations.no_show') && <Button variant="outline" onClick={() => setNoShow(true)}><UserX />No-show</Button>}

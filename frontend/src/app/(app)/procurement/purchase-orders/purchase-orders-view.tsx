@@ -1,7 +1,7 @@
 'use client';
 import React, { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Plus, Check, X, Send, Mail, PackageCheck, Lock, Printer } from 'lucide-react';
+import { Plus, Check, X, Send, Mail, PackageCheck, Lock } from 'lucide-react';
 import { post, get } from '@/lib/api';
 import { useApi, useAction } from '@/lib/query';
 import { useAuth } from '@/lib/auth';
@@ -18,6 +18,7 @@ import { ApprovalTrail } from '@/components/shared/approval-trail';
 import { AuditTrail } from '@/components/shared/audit-trail';
 import { Attachments } from '@/components/shared/attachments';
 import { fmtDate, fmtDateTime, fmtMoney, fmtNum, today, addDays } from '@/lib/utils';
+import { PrintButton, PurchaseOrderDoc } from '@/lib/print';
 
 export const PO_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED', 'CLOSED', 'REJECTED', 'CANCELLED'];
 /** PO wizard-lite: header → lines (prefilled from an approved requisition or a selected quotation) → submit. */
@@ -67,7 +68,7 @@ export function PODetail({ id, onClose }: { id: string | null; onClose: () => vo
       {['RECEIVED', 'PARTIALLY_RECEIVED'].includes(po.status) && can('purchases.invoice') && <Button variant="outline" onClick={() => router.push(`/procurement/supplier-invoices?new=1&po=${po.id}`)}>Record supplier invoice</Button>}
       {['APPROVED', 'SENT', 'PARTIALLY_RECEIVED', 'RECEIVED'].includes(po.status) && can('purchases.approve', 'purchases.create') && <Button variant="ghost" onClick={() => setClose(true)}><Lock />Close PO</Button>}
       {['DRAFT', 'PENDING_APPROVAL', 'APPROVED'].includes(po.status) && can('purchases.create') && <Button variant="ghost" onClick={() => setCancel(true)}>Cancel</Button>}
-      <Button variant="ghost" onClick={() => window.print()}><Printer />Print</Button>
+      <PrintButton doc="purchase_order" variant="ghost" title={`Purchase order ${po.number}`} render={(ctx) => <PurchaseOrderDoc po={po} ctx={ctx} />} />
     </div>
     <div className="grid gap-4 lg:grid-cols-2">
       <Section title="Goods received"><ul className="divide-y text-sm">{(po.grns ?? []).map((g: any) => <li key={g.id} className="flex justify-between py-1"><a className="underline" href={`/procurement/grns?id=${g.id}`}>{g.number}</a><span>{fmtDate(g.received_date)} · {g.received_by_name} · {fmtMoney(g.total_value, currency)} <StatusBadge status={g.status} /></span></li>)}{(po.grns ?? []).length === 0 && <li className="py-2 text-muted-foreground">Nothing received yet.</li>}</ul></Section>

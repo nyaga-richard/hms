@@ -18,7 +18,7 @@
     "lint": "npm run lint -w frontend",
     "start:backend": "npm start -w backend",
     "start:frontend": "npm start -w frontend",
-    "docker:dev": "docker compose up --build",
+    "docker:dev": "docker compose -f docker-compose.dev.yml up --build",
     "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build"
   }
 }

@@ -190,7 +190,7 @@ ordersRouter.post('/:id/split', requirePermission('pos.modify_order'), asyncHand
 }));
 ordersRouter.get('/:id/receipt', requirePermission('pos.view'), asyncHandler(async (req, res) => {
   const o = await pos.orderDetail(req.params.id);
-  const prop = (await pool.query(`SELECT name, address, phone, tax_number FROM properties WHERE id=$1`, [o.property_id])).rows[0];
+  const prop = (await pool.query(`SELECT name, address, city, country, phone, email, website, tax_number, currency, logo_url FROM properties WHERE id=$1`, [o.property_id])).rows[0];
   if (req.query.reprint === 'true') { if (!hasPermission(req, 'pos.reprint')) throw new Forbidden('Reprint permission required'); await audit({ ...auditCtx(req), action: 'REPRINT', entityType: 'order', entityId: o.id }); }
   res.json({ property: prop, order: o });
 }));

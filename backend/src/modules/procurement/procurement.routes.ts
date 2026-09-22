@@ -182,7 +182,7 @@ quotationsRouter.post('/:id/select', requirePermission('purchases.create'), asyn
 
 // ---------------- Purchase orders ----------------
 export const purchaseOrdersRouter = Router();
-const poSelect = `SELECT po.*, s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone, st.name AS store_name, pr.number AS requisition_number, cb.full_name AS created_by_name, ab.full_name AS approved_by_name,
+const poSelect = `SELECT po.*, s.name AS supplier_name, s.email AS supplier_email, s.phone AS supplier_phone, s.address AS supplier_address, s.tax_number AS supplier_tax_number, s.contact_name AS supplier_contact, s.code AS supplier_code, st.name AS store_name, pr.number AS requisition_number, cb.full_name AS created_by_name, ab.full_name AS approved_by_name,
     (SELECT COUNT(*) FROM purchase_order_items i WHERE i.purchase_order_id=po.id)::int AS item_count, (SELECT COALESCE(SUM(received_qty),0) FROM purchase_order_items i WHERE i.purchase_order_id=po.id) AS received_total_qty, (SELECT COALESCE(SUM(quantity),0) FROM purchase_order_items i WHERE i.purchase_order_id=po.id) AS ordered_total_qty,
     (SELECT COUNT(*) FROM grns g WHERE g.purchase_order_id=po.id AND g.status='COMPLETED')::int AS grn_count, (SELECT COUNT(*) FROM supplier_invoices si WHERE si.purchase_order_id=po.id AND si.status<>'CANCELLED')::int AS invoice_count
   FROM purchase_orders po JOIN suppliers s ON s.id=po.supplier_id LEFT JOIN stores st ON st.id=po.store_id LEFT JOIN purchase_requisitions pr ON pr.id=po.requisition_id LEFT JOIN users cb ON cb.id=po.created_by LEFT JOIN users ab ON ab.id=po.approved_by`;

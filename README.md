@@ -65,10 +65,13 @@ Multi-property: every transactional table carries `property_id`; the active prop
 ```bash
 git clone <repo> hms && cd hms
 cp .env.example .env                 # edit POSTGRES_PASSWORD / JWT_SECRET / SESSION_SECRET at least
-docker compose up --build            # postgres + backend (tsx watch) + frontend (next dev)
+docker compose -f docker-compose.dev.yml up --build     # postgres + backend (tsx watch) + frontend (next dev)  — or: npm run docker:dev
 # first run only — demo data (roles, Demo Hotel, rooms, outlets, menus, products, opening stock…)
-docker compose exec backend npm run seed -w backend
+docker compose -f docker-compose.dev.yml exec backend npm run seed -w backend
 ```
+
+(Tip: put `COMPOSE_FILE=docker-compose.dev.yml` in your local `.env` to drop the `-f` flag. There is deliberately
+no default `docker-compose.yml`, so a bare `docker compose up` on a server cannot start the dev stack by mistake.)
 
 Open **http://localhost:3000** and log in as `admin` / `Password123`.
 
@@ -236,6 +239,14 @@ account mappings) lives in the database and is edited under **Settings** — no 
 
 ---
 
+### Printing (A4 and thermal rolls)
+
+Every printable document (receipts, kitchen tickets, folios, confirmations, POs, BEOs, shift reports, club
+tickets, reports) is rendered into an isolated print document sized for the paper — hotel defaults under
+**Settings → General → Printing**, per-terminal override from the ▾ menu next to each Print button (80 mm /
+58 mm rolls, A4, A5, Letter), *Preview / save as PDF* from the same menu. Printer driver setup, silent POS
+printing (`--kiosk-printing`) and troubleshooting: [docs/DEPLOYMENT.md → Appendix D](docs/DEPLOYMENT.md#18-appendix-d--printer-setup-a4-sheets-and-thermal-rolls).
+
 ## 8. Testing
 
 Integration tests (Vitest + Supertest) exercise the real Express app against a **dedicated test
@@ -383,7 +394,7 @@ and `node frontend/.next/standalone/frontend/server.js` behind any reverse proxy
 ├── docs/DEPLOYMENT.md       production guide: Ubuntu + Docker + Cloudflare Tunnel
 ├── scripts/                 dev-up.sh / dev-pg.sh / dev-snapshot.sh (local PostgreSQL helpers)
 ├── data/                    dev-snapshot.dump — compact pg_dump used by dev-up.sh (optional)
-├── docker-compose.yml       development stack (hot reload)
+├── docker-compose.dev.yml   development stack (hot reload) — no default docker-compose.yml on purpose
 ├── docker-compose.prod.yml  production stack (nginx, optional cloudflared & backups)
 ├── .env.example             every supported variable, documented
 └── README.md
