@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
 import path from 'path';
 
-dotenv.config({ path: path.resolve(process.cwd(), '.env') });
+// Load <cwd>/.env first, then the repository root .env as a fallback (values already set are never overridden).
+dotenv.config({ path: [path.resolve(process.cwd(), '.env'), path.resolve(process.cwd(), '..', '.env')] });
 
 function req(name: string, fallback?: string): string {
   const v = process.env[name] ?? fallback;
@@ -28,4 +29,10 @@ export const env = {
   uploadMaxSize: parseInt(process.env.UPLOAD_MAX_SIZE ?? '10485760', 10),
   defaultCurrency: process.env.DEFAULT_CURRENCY ?? 'KES',
   defaultTimezone: process.env.DEFAULT_TIMEZONE ?? 'Africa/Nairobi',
+  // Reverse-proxy hops in front of the API (nginx = 1). Used for req.ip / rate limiting.
+  trustProxyHops: parseInt(process.env.TRUST_PROXY_HOPS ?? '1', 10),
+  // Per-client-IP limits. Behind NAT a whole property may share one public IP, so keep these generous;
+  // per-account brute-force protection is handled separately by MAX_FAILED_LOGINS / LOCKOUT_MINUTES.
+  rateLimitApiPerMinute: parseInt(process.env.RATE_LIMIT_API_PER_MINUTE ?? '1200', 10),
+  rateLimitLoginPer15Min: parseInt(process.env.RATE_LIMIT_LOGIN_PER_15MIN ?? (process.env.NODE_ENV === 'production' ? '100' : '1000'), 10),
 };

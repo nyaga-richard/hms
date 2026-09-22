@@ -52,15 +52,21 @@ const MAPPINGS: Record<string, string> = { CASH: '1010', BANK: '1020', MOBILE_MO
   ROOM_REVENUE: '4010', RESTAURANT_REVENUE: '4100', BAR_REVENUE: '4200', CLUB_REVENUE: '4300', MINIBAR_REVENUE: '4400', LAUNDRY_REVENUE: '4500', SPA_REVENUE: '4600', EVENT_REVENUE: '4700', OTHER_REVENUE: '4800', SALES_RETURNS: '4900',
   COGS: '5030', COGS_FOOD: '5010', COGS_BEVERAGE: '5020', COMPLIMENTARY_EXPENSE: '5040', WASTE_EXPENSE: '5050', STOCK_VARIANCE: '5060', CASH_OVER_SHORT: '6460', REPAIRS: '6200', GENERAL_EXPENSE: '6490', DEPRECIATION: '6480' };
 
-export async function seed(log: (m: string) => void = console.log) {
+export interface SeedOptions { /** production install: organisation + admin only, no demo data */ minimal?: boolean }
+
+export async function seed(log: (m: string) => void = console.log, opts: SeedOptions = {}) {
+  const minimal = opts.minimal ?? process.env.SEED_MODE === 'minimal';
+  const full = !minimal;
+  const e = (k: string, d: string) => (process.env[k] && process.env[k]!.trim()) || d;
   await runMigrations(log);
   await bootstrapPermissions();
   await withTransaction(async (c) => {
     // Company & property
     let company = (await c.query(`SELECT * FROM companies LIMIT 1`)).rows[0];
-    if (!company) company = (await c.query(`INSERT INTO companies (name, legal_name, tax_number, base_currency, address, phone, email, website) VALUES ('Savanna Hospitality Group','Savanna Hospitality Group Ltd','P051234567X','KES','Nairobi, Kenya','+254 700 000000','info@savannahotels.example','https://savannahotels.example') RETURNING *`)).rows[0];
-    let prop = (await c.query(`SELECT * FROM properties WHERE code='DEMO'`)).rows[0];
-    if (!prop) prop = (await c.query(`INSERT INTO properties (company_id, code, name, type, address, city, country, phone, email, tax_number, currency, timezone, service_charge_percent) VALUES ($1,'DEMO','Demo Hotel & Resort','HOTEL','Mombasa Road','Nairobi','Kenya','+254 700 111222','frontdesk@demohotel.example','P051234567X','KES','Africa/Nairobi',10) RETURNING *`, [company.id])).rows[0];
+    if (!company) company = (await c.query(`INSERT INTO companies (name, legal_name, tax_number, base_currency, address, phone, email, website) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`, [e('COMPANY_NAME', 'Savanna Hospitality Group'), e('COMPANY_LEGAL_NAME', e('COMPANY_NAME', 'Savanna Hospitality Group Ltd')), e('COMPANY_TAX_NUMBER', 'P051234567X'), e('HOTEL_CURRENCY', 'KES'), e('HOTEL_ADDRESS', 'Nairobi, Kenya'), e('HOTEL_PHONE', '+254 700 000000'), e('HOTEL_EMAIL', 'info@savannahotels.example'), e('COMPANY_WEBSITE', 'https://savannahotels.example')])).rows[0];
+    const propCode = e('HOTEL_CODE', 'DEMO');
+    let prop = (await c.query(`SELECT * FROM properties WHERE code=$1`, [propCode])).rows[0];
+    if (!prop) prop = (await c.query(`INSERT INTO properties (company_id, code, name, type, address, city, country, phone, email, tax_number, currency, timezone, service_charge_percent) VALUES ($1,$2,$3,'HOTEL',$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [company.id, propCode, e('HOTEL_NAME', 'Demo Hotel & Resort'), e('HOTEL_ADDRESS', 'Mombasa Road'), e('HOTEL_CITY', 'Nairobi'), e('HOTEL_COUNTRY', 'Kenya'), e('HOTEL_PHONE', '+254 700 111222'), e('HOTEL_EMAIL', 'frontdesk@demohotel.example'), e('COMPANY_TAX_NUMBER', 'P051234567X'), e('HOTEL_CURRENCY', 'KES'), e('HOTEL_TIMEZONE', 'Africa/Nairobi'), Number(e('SERVICE_CHARGE_PERCENT', '10'))])).rows[0];
     const P = prop.id;
     log(`Property: ${prop.name}`);
 
@@ -86,7 +92,9 @@ export async function seed(log: (m: string) => void = console.log) {
     }
 
     // Users (password: Password123 for all demo users)
-    const pw = await hashPassword('Password123');
+    const adminPassword = minimal ? e('ADMIN_PASSWORD', '') : 'Password123';
+    if (minimal && adminPassword.length < 10) throw new Error('SEED_MODE=minimal requires ADMIN_PASSWORD (at least 10 characters)');
+    const pw = await hashPassword(adminPassword);
     const users: [string, string, string, string, string][] = [ // username, name, email, role, dept
       ['admin', 'System Administrator', 'admin@demohotel.example', 'SUPER_ADMIN', 'ADMIN'], ['gm', 'Grace Mwangi', 'gm@demohotel.example', 'GENERAL_MANAGER', 'ADMIN'], ['fom', 'Faith Otieno', 'fom@demohotel.example', 'FRONT_OFFICE_MANAGER', 'FO'],
       ['reception', 'Brian Kamau', 'reception@demohotel.example', 'RECEPTIONIST', 'FO'], ['hkmanager', 'Mary Wanjiru', 'hk@demohotel.example', 'HOUSEKEEPING_MANAGER', 'HK'], ['housekeeper', 'Jane Achieng', 'jane@demohotel.example', 'HOUSEKEEPER', 'HK'],
@@ -94,7 +102,7 @@ export async function seed(log: (m: string) => void = console.log) {
       ['bartender', 'Samuel Kiptoo', 'bartender@demohotel.example', 'BARTENDER', 'BAR'], ['chef', 'Chef Daniel Mutua', 'chef@demohotel.example', 'CHEF', 'KIT'], ['storekeeper', 'Alice Nyambura', 'stores@demohotel.example', 'STOREKEEPER', 'STR'],
       ['purchasing', 'James Ochieng', 'purchasing@demohotel.example', 'PURCHASING_OFFICER', 'PUR'], ['accountant', 'Ruth Chebet', 'accounts@demohotel.example', 'ACCOUNTS_MANAGER', 'FIN'], ['cashier', 'Paul Maina', 'cashier@demohotel.example', 'CASHIER', 'FO'],
       ['maintenance', 'Joseph Kariuki', 'maintenance@demohotel.example', 'MAINTENANCE_MANAGER', 'MNT'], ['technician', 'Tom Barasa', 'tech@demohotel.example', 'MAINTENANCE_TECHNICIAN', 'MNT'], ['auditor', 'Internal Auditor', 'audit@demohotel.example', 'AUDITOR', 'FIN'],
-    ];
+    ].filter(([username]) => full || username === 'admin') as [string, string, string, string, string][];
     const userIds: Record<string, string> = {};
     let empNo = 1;
     for (const [username, name, email, role, dept] of users) {
@@ -102,12 +110,12 @@ export async function seed(log: (m: string) => void = console.log) {
       if (existing) { userIds[username] = existing.id; continue; }
       const [first, ...rest] = name.split(' ');
       const emp = (await c.query(`INSERT INTO employees (property_id, department_id, employee_no, first_name, last_name, position, email, hire_date) VALUES ($1,$2,$3,$4,$5,$6,$7,CURRENT_DATE - 365) ON CONFLICT (property_id, employee_no) DO UPDATE SET email=EXCLUDED.email RETURNING id`, [P, deptIds[dept], `EMP-${String(empNo++).padStart(4, '0')}`, first, rest.join(' ') || '-', ROLE_DEFS[role].name, email])).rows[0];
-      const u = (await c.query(`INSERT INTO users (username, email, full_name, password_hash, employee_id, department_id, default_property_id, is_superuser, must_change_password) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,false) RETURNING id`, [username, email, name, pw, emp.id, deptIds[dept], P, role === 'SUPER_ADMIN'])).rows[0];
+      const u = (await c.query(`INSERT INTO users (username, email, full_name, password_hash, employee_id, department_id, default_property_id, is_superuser, must_change_password) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9) RETURNING id`, [username, email, name, pw, emp.id, deptIds[dept], P, role === 'SUPER_ADMIN', minimal])).rows[0];
       userIds[username] = u.id;
       await c.query(`INSERT INTO user_roles (user_id, role_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [u.id, roleIds[role]]);
       await c.query(`INSERT INTO user_properties (user_id, property_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`, [u.id, P]);
     }
-    log(`Users: ${users.length} (password: Password123)`);
+    log(minimal ? `Users: admin only (password from ADMIN_PASSWORD, must be changed at first login)` : `Users: ${users.length} (password: Password123)`);
 
     // Chart of accounts + mappings
     const acct: Record<string, string> = {};
@@ -135,6 +143,7 @@ export async function seed(log: (m: string) => void = console.log) {
       pmIds[code] = r.id;
     }
 
+    if (full) {
     // Room types & rooms
     const rtIds: Record<string, string> = {};
     for (const [code, name, adults, children, occ, rate, beds, sort] of [['STD', 'Standard Room', 2, 1, 3, 8500, '1 Queen', 1], ['DLX', 'Deluxe Room', 2, 2, 4, 12000, '1 King', 2], ['EXE', 'Executive Room', 2, 1, 3, 15000, '1 King', 3], ['FAM', 'Family Room', 4, 2, 6, 18000, '2 Queen', 4], ['STE', 'Suite', 2, 2, 4, 25000, '1 King + Sofa bed', 5], ['PRS', 'Presidential Suite', 4, 2, 6, 60000, '2 King', 6]] as const) {
@@ -169,6 +178,7 @@ export async function seed(log: (m: string) => void = console.log) {
         [`G-${String(gno++).padStart(6, '0')}`, title, fn, ln, email, phone, nat, vip, `P${Math.floor(1000000 + Math.random() * 9000000)}`, fn === 'Wanjiku' ? corp.id : null]);
     }
     await c.query(`INSERT INTO number_sequences (property_id, doc_type, prefix, padding, next_value) VALUES (NULL,'GUEST','G',6,$1) ON CONFLICT (property_id, doc_type) DO UPDATE SET next_value=GREATEST(number_sequences.next_value, EXCLUDED.next_value)`, [gno]);
+    }
 
     // Units, categories, stores, products
     const unitIds: Record<string, string> = {};
@@ -180,6 +190,7 @@ export async function seed(log: (m: string) => void = console.log) {
       catIds[code] = (await c.query(`INSERT INTO product_categories (code, name, type, inventory_account_id, cogs_account_id) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (code) DO UPDATE SET name=EXCLUDED.name RETURNING id`, [code, name, type, acct[inv], acct[cogs]])).rows[0].id;
     }
     const storeIds: Record<string, string> = {};
+    if (full) {
     for (const [code, name, type, dept] of [['MAIN', 'Main Store', 'MAIN', 'STR'], ['FOOD', 'Food Store', 'FOOD', 'STR'], ['BEV', 'Beverage Store', 'BEVERAGE', 'STR'], ['HK', 'Housekeeping Store', 'HOUSEKEEPING', 'HK'], ['ENG', 'Engineering Store', 'ENGINEERING', 'MNT'], ['KIT', 'Main Kitchen Store', 'KITCHEN', 'KIT'], ['LND', 'Laundry Store', 'LAUNDRY', 'LND'], ['PBAR', 'Pool Bar Store', 'BAR', 'BAR'], ['RBAR', 'Rooftop Bar Store', 'BAR', 'BAR'], ['CLUB', 'Night Club Store', 'BAR', 'CLUB']] as const) {
       storeIds[code] = (await c.query(`INSERT INTO stores (property_id, code, name, type, department_id, keeper_user_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (property_id, code) DO UPDATE SET name=EXCLUDED.name RETURNING id`, [P, code, name, type, deptIds[dept], userIds.storekeeper])).rows[0].id;
     }
@@ -294,11 +305,13 @@ export async function seed(log: (m: string) => void = console.log) {
       log('Menus & recipes created');
     }
 
+    }
     // Shift templates
     for (const [name, st, et] of [['Morning', '06:00', '14:00'], ['Afternoon', '14:00', '22:00'], ['Night', '22:00', '06:00'], ['Split (Restaurant)', '11:00', '23:00']] as const) {
       await c.query(`INSERT INTO shift_templates (property_id, name, start_time, end_time) SELECT $1,$2,$3,$4 WHERE NOT EXISTS (SELECT 1 FROM shift_templates WHERE property_id=$1 AND name=$2)`, [P, name, st, et]);
     }
     // Room item types, laundry services, services, venues, expense categories, petty cash
+    if (full) {
     for (const [name, cat, ser, val, qty] of [['Television 43"', 'APPLIANCE', true, 45000, 1], ['TV Remote', 'APPLIANCE', false, 1500, 1], ['Mini Fridge', 'APPLIANCE', true, 25000, 1], ['Electronic Safe', 'APPLIANCE', true, 15000, 1], ['Hair Dryer', 'APPLIANCE', false, 3500, 1], ['Electric Kettle', 'APPLIANCE', false, 2500, 1], ['Iron', 'APPLIANCE', false, 3000, 1], ['Ironing Board', 'FURNITURE', false, 4000, 1], ['Bath Towel', 'LINEN', false, 650, 2], ['Hand Towel', 'LINEN', false, 280, 2], ['Bathrobe', 'LINEN', false, 2200, 2], ['Slippers', 'AMENITY', false, 85, 2], ['Water Glass', 'GLASSWARE', false, 250, 2], ['Coffee Mug', 'GLASSWARE', false, 300, 2], ['Coffee Sachets', 'AMENITY', false, 20, 4], ['Tea Bags', 'AMENITY', false, 8, 4], ['Mineral Water 500ml (complimentary)', 'MINIBAR', false, 120, 2], ['Shampoo', 'TOILETRY', false, 18, 2], ['Shower Gel', 'TOILETRY', false, 18, 2], ['Soap', 'TOILETRY', false, 12, 2], ['Study Desk', 'FURNITURE', false, 12000, 1], ['Wardrobe Hangers (set)', 'FURNITURE', false, 800, 1]] as const) {
       await c.query(`INSERT INTO room_item_types (property_id, name, category, is_serialized, replacement_value, standard_quantity, is_consumable) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (property_id, name) DO NOTHING`, [P, name, cat, ser, val, qty, ['AMENITY', 'TOILETRY', 'MINIBAR'].includes(cat)]);
     }
@@ -319,15 +332,19 @@ export async function seed(log: (m: string) => void = console.log) {
     for (const [code, name, type, th, bq, hr, hd, fd] of [['KILI', 'Kilimanjaro Ballroom', 'BALLROOM', 400, 250, 15000, 60000, 100000], ['MARA', 'Mara Conference Room', 'CONFERENCE', 120, 80, 6000, 25000, 40000], ['TSAVO', 'Tsavo Boardroom', 'BOARDROOM', 20, 14, 3000, 12000, 20000], ['GARDEN', 'Acacia Gardens', 'GARDEN', 500, 350, 0, 80000, 150000]] as const) {
       await c.query(`INSERT INTO venues (property_id, code, name, type, capacity_theatre, capacity_banquet, hourly_rate, half_day_rate, full_day_rate, amenities) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (property_id, code) DO NOTHING`, [P, code, name, type, th, bq, hr, hd, fd, ['Projector', 'PA System', 'WiFi', 'Flipcharts']]);
     }
+    }
     for (const [code, name, a] of [['ELEC', 'Electricity', '6100'], ['WATER', 'Water', '6110'], ['INTERNET', 'Internet & Telephone', '6120'], ['FUEL', 'Fuel & Generator', '6130'], ['REPAIRS', 'Repairs & Maintenance', '6200'], ['TRANSPORT', 'Transport & Travel', '6420'], ['MARKETING', 'Marketing & Advertising', '6300'], ['LICENSE', 'Licences & Permits', '6400'], ['SECURITY', 'Security Services', '6410'], ['CLEANING', 'Cleaning Supplies', '6210'], ['OFFICE', 'Office Expenses', '6430'], ['ENTERTAIN', 'Entertainment', '5040'], ['PROF', 'Professional Fees', '6440'], ['BANK', 'Bank Charges', '6450'], ['MISC', 'Miscellaneous', '6490']] as const) {
       await c.query(`INSERT INTO expense_categories (code, name, account_id) VALUES ($1,$2,$3) ON CONFLICT (code) DO UPDATE SET account_id=EXCLUDED.account_id`, [code, name, acct[a]]);
     }
+    if (full) {
     for (const [name, cust, dept, fl] of [['Reception Petty Cash', 'fom', 'FO', 20000], ['Restaurant Petty Cash', 'restaurant', 'FNB', 15000], ['Maintenance Petty Cash', 'maintenance', 'MNT', 25000], ['General Petty Cash', 'accountant', 'FIN', 50000]] as const) {
       await c.query(`INSERT INTO petty_cash_funds (property_id, name, custodian_user_id, department_id, account_id, float_amount) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (property_id, name) DO NOTHING`, [P, name, userIds[cust], deptIds[dept], acct['1040'], fl]);
+    }
     }
     for (const [name, rate] of [['Furniture & Fittings', 12.5], ['Kitchen Equipment', 12.5], ['Computers & POS Devices', 33.3], ['Vehicles', 25], ['Appliances', 12.5], ['Laundry Machines', 12.5], ['Generators', 12.5], ['Security Equipment', 20]] as const) {
       await c.query(`INSERT INTO asset_categories (name, depreciation_rate) VALUES ($1,$2) ON CONFLICT (name) DO NOTHING`, [name, rate]);
     }
+    if (full) {
     if (Number((await c.query(`SELECT COUNT(*) FROM assets WHERE property_id=$1`, [P])).rows[0].count) === 0) {
       const cats = Object.fromEntries((await c.query(`SELECT id, name FROM asset_categories`)).rows.map((r) => [r.name, r.id]));
       let n = 1;
@@ -335,6 +352,7 @@ export async function seed(log: (m: string) => void = console.log) {
         await c.query(`INSERT INTO assets (property_id, asset_number, name, category_id, location, department_id, purchase_date, cost, status, barcode) VALUES ($1,$2,$3,$4,$5,$6,CURRENT_DATE - 400,$7,'IN_USE',$2)`, [P, `AST-${String(n++).padStart(6, '0')}`, name, cats[cat], loc, deptIds[dept], cost]);
       }
       await c.query(`INSERT INTO number_sequences (property_id, doc_type, prefix, padding, next_value) VALUES (NULL,'ASSET','AST',6,$1) ON CONFLICT (property_id, doc_type) DO NOTHING`, [n]);
+    }
     }
 
     // Default approval workflows
@@ -356,7 +374,7 @@ export async function seed(log: (m: string) => void = console.log) {
     }
 
     // Opening stock (only when store is empty) — posts OPENING movements + journal
-    if (Number((await c.query(`SELECT COUNT(*) FROM stock_movements WHERE property_id=$1`, [P])).rows[0].count) === 0) {
+    if (full && Number((await c.query(`SELECT COUNT(*) FROM stock_movements WHERE property_id=$1`, [P])).rows[0].count) === 0) {
       const { moveStock } = await import('../modules/inventory/stock.service');
       const { postJournal } = await import('../modules/finance/accounting.service');
       let openingFood = 0, openingBev = 0, openingGen = 0;
@@ -385,9 +403,9 @@ export async function seed(log: (m: string) => void = console.log) {
       await c.query(`INSERT INTO settings (property_id, key, value) VALUES (NULL,$1,$2) ON CONFLICT (property_id, key) DO NOTHING`, [k, JSON.stringify(v)]);
     }
   });
-  log('Seed complete');
+  log(minimal ? 'Minimal (production) seed complete' : 'Seed complete');
 }
 
 if (require.main === module) {
-  seed().then(() => pool.end()).catch((e) => { console.error(e); process.exit(1); });
+  seed(console.log, { minimal: process.argv.includes('--minimal') || process.env.SEED_MODE === 'minimal' }).then(() => pool.end()).catch((e) => { console.error(e); process.exit(1); });
 }

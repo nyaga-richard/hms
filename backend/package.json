@@ -13,7 +13,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "migrate:prod": "node dist/db/migrate.js",
     "seed:prod": "node dist/db/seed.js",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "seed:minimal": "tsx src/db/seed.ts --minimal",
+    "seed:prod:minimal": "node dist/db/seed.js --minimal"
   },
   "dependencies": {
     "bcryptjs": "^2.4.3",

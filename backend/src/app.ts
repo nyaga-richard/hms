@@ -13,12 +13,13 @@ import { registerModuleRoutes } from './modules';
 
 export function createApp() {
   const app = express();
-  app.set('trust proxy', 1);
+  app.set('trust proxy', env.trustProxyHops);
   app.use(helmet({ crossOriginResourcePolicy: { policy: 'cross-origin' } }));
   app.use(cors({ origin: env.corsOrigins.includes('*') ? true : env.corsOrigins, credentials: true, exposedHeaders: ['Content-Disposition'] }));
   app.use(express.json({ limit: '5mb' }));
   app.use(express.urlencoded({ extended: true }));
-  app.use('/api', rateLimit({ windowMs: 60_000, limit: 600, standardHeaders: true, legacyHeaders: false, skip: () => env.isTest }));
+  app.use('/api', rateLimit({ windowMs: 60_000, limit: env.rateLimitApiPerMinute, standardHeaders: true, legacyHeaders: false, skip: () => env.isTest,
+    message: { error: { code: 'RATE_LIMITED', message: 'Too many requests. Please slow down and try again shortly.' } } }));
 
   app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'hms-backend', time: new Date().toISOString() }));
   app.use('/api/auth', authRouter);

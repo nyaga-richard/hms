@@ -9,7 +9,7 @@ import { env } from '../../config/env';
 
 export const authRouter = Router();
 
-const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: env.isProd ? 30 : 1000, skip: () => env.isTest, standardHeaders: true, legacyHeaders: false,
+const loginLimiter = rateLimit({ windowMs: 15 * 60 * 1000, limit: env.rateLimitLoginPer15Min, skip: () => env.isTest, standardHeaders: true, legacyHeaders: false,
   message: { error: { code: 'RATE_LIMITED', message: 'Too many login attempts. Please try again later.' } } });
 
 const serializeUser = (u: any) => ({

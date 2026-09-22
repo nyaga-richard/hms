@@ -95,13 +95,17 @@ missing, runs a private cluster under `.cache/pgdata` (git-ignored), creates `hm
 
 ### Production
 
-See [Deployment](#9-deployment): `docker compose -f docker-compose.prod.yml up -d --build`.
+Step-by-step guide for Ubuntu Server + Docker + Cloudflare Tunnel: **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+Short version — see [Deployment](#9-deployment): `docker compose -f docker-compose.prod.yml up -d --build`.
 
 ---
 
 ## 3. Demo logins
 
-All demo users share the password **`Password123`** — change them (or disable the demo users) before going live; *Settings → Users → Reset password* forces a change at next login.
+All demo users share the password **`Password123`**. They exist only when the seed runs in its default `demo`
+mode; a production install uses `SEED_MODE=minimal` (organisation + roles + chart of accounts + one `admin`
+who must change the password at first login — see [Deployment](#9-deployment)). If demo users exist on a
+server you are re-purposing, disable them under *Settings → Users*.
 
 | Username | Role | Typical use |
 |---|---|---|
@@ -217,12 +221,14 @@ All configuration is via environment variables; copy `.env.example` → `.env` (
 | `DATABASE_URL`, `DATABASE_URL_TEST` | PostgreSQL connection strings (test DB name must contain `test`) |
 | `JWT_SECRET`, `SESSION_SECRET`, `SESSION_TTL_MINUTES` | session security (sessions are stored server-side and revocable) |
 | `BCRYPT_ROUNDS`, `MAX_FAILED_LOGINS`, `LOCKOUT_MINUTES` | password hashing & brute-force lockout |
+| `TRUST_PROXY_HOPS`, `RATE_LIMIT_API_PER_MINUTE`, `RATE_LIMIT_LOGIN_PER_15MIN` | reverse-proxy depth (nginx = 1) and per-client-IP limits (defaults 1200/min, 100 logins per 15 min in production) |
+| `SEED_MODE` (`demo`/`minimal`), `ADMIN_PASSWORD`, `HOTEL_*`, `COMPANY_*`, `SERVICE_CHARGE_PERCENT` | first-run seed: demo dataset, or a production organisation with a single admin |
 | `PORT`, `NODE_ENV`, `CORS_ORIGINS` | backend runtime (`production` hides stack traces & enables strict rate limits) |
 | `STORAGE_PATH`, `UPLOAD_MAX_SIZE`, `BACKUP_PATH` | attachments & backup folders (Docker volumes `uploads`, `backups`) |
 | `NEXT_PUBLIC_API_URL`, `BACKEND_INTERNAL_URL` | frontend → backend proxy target (`http://backend:4000` in Docker) |
 | `DEFAULT_CURRENCY`, `DEFAULT_TIMEZONE`, `DEFAULT_LOCALE` | defaults for new properties (multi-currency & i18n ready) |
 | `SMTP_*` | optional e-mail notifications |
-| `POSTGRES_PASSWORD`, `HTTP_PORT`, `CLOUDFLARE_TUNNEL_TOKEN`, `BACKUP_CRON`, `BACKUP_KEEP_DAYS` | docker-compose only |
+| `POSTGRES_PASSWORD`, `HTTP_BIND`, `HTTP_PORT`, `CLOUDFLARE_TUNNEL_TOKEN`, `CLOUDFLARE_TUNNEL_PROTOCOL`, `BACKUP_CRON`, `BACKUP_KEEP_DAYS`, `COMPOSE_FILE`, `COMPOSE_PROFILES` | docker-compose only |
 
 Business configuration (service charge %, tax mode, document numbering — prefix, padding, yearly reset, e.g. `RES-2026-000123`,
 check-out balance rules, overbooking, discount/void limits, approval workflows, chart of accounts and
@@ -260,13 +266,20 @@ Other checks: `npm run typecheck -w backend`, `npm run typecheck -w frontend`, `
 
 ## 9. Deployment
 
+The complete, copy-paste walkthrough (server hardening, Docker install, `.env`, Cloudflare Tunnel, seeding,
+verification, backups, updates, troubleshooting) is in **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+
 ### docker-compose.prod.yml
 
 ```bash
 cp .env.example .env            # strong POSTGRES_PASSWORD, JWT_SECRET, SESSION_SECRET; CORS_ORIGINS=https://your.domain
+                                # SEED_MODE=minimal + HOTEL_*/COMPANY_* for a real property
 docker compose -f docker-compose.prod.yml up -d --build
 docker compose -f docker-compose.prod.yml logs -f backend      # "HMS backend listening on :4000 (production)"
-docker compose -f docker-compose.prod.yml exec backend npm run seed:prod   # optional demo data
+# first run only — production organisation with a single admin (password ≥ 10 chars, changed at first login):
+docker compose -f docker-compose.prod.yml exec -e ADMIN_PASSWORD='…' backend npm run seed:prod
+# …or the full demo dataset for a training server:
+docker compose -f docker-compose.prod.yml exec -e SEED_MODE=demo backend npm run seed:prod
 ```
 
 * `postgres` — PostgreSQL 17 with the `pgdata` volume (not published to the host).
@@ -274,10 +287,14 @@ docker compose -f docker-compose.prod.yml exec backend npm run seed:prod   # opt
   every start; volumes `uploads` and `backups`; healthcheck on `/api/health`.
 * `frontend` — Next.js standalone image (`frontend/Dockerfile`); the `/api` rewrite target is baked at build
   time from the `BACKEND_INTERNAL_URL` build arg (defaults to `http://backend:4000`).
-* `nginx` — single entry point on `HTTP_PORT` (80): `/api` and `/uploads` → backend, everything else →
-  frontend, long cache for `/_next/static`, 25 MB uploads.
+* `nginx` — single entry point published on `HTTP_BIND:HTTP_PORT` (default `0.0.0.0:80`; use
+  `127.0.0.1:8080` behind a tunnel — Docker-published ports bypass UFW): `/api` and `/uploads` → backend,
+  everything else → frontend, long cache for `/_next/static`, 25 MB uploads, real client IP taken from
+  Cloudflare's `CF-Connecting-IP` when present.
 * `cloudflared` (`--profile tunnel`) — publishes the stack over HTTPS through a Cloudflare Tunnel using
-  `CLOUDFLARE_TUNNEL_TOKEN`; point the tunnel's public hostname at `http://nginx:80`. No inbound ports needed.
+  `CLOUDFLARE_TUNNEL_TOKEN`; point the tunnel's public hostname at `http://nginx:80`. No inbound ports needed
+  (`CLOUDFLARE_TUNNEL_PROTOCOL=http2` if UDP 7844 is blocked). Set `COMPOSE_FILE=docker-compose.prod.yml` and
+  `COMPOSE_PROFILES=tunnel,backup` in `.env` so that plain `docker compose …` always targets the full stack.
 * `db-backup` (`--profile backup`) — cron-driven `pg_dump -Fc` into the `backups` volume with retention.
 
 Terminate TLS at Cloudflare / your load balancer, or add a 443 server block to `deploy/nginx/hms.conf`.
@@ -363,6 +380,7 @@ and `node frontend/.next/standalone/frontend/server.js` behind any reverse proxy
 ├── frontend/                Next.js 14 app (src/app/(app)/<module>/…, src/components, src/lib)
 │   └── Dockerfile
 ├── deploy/                  nginx config, backup script, postgres init (test DB)
+├── docs/DEPLOYMENT.md       production guide: Ubuntu + Docker + Cloudflare Tunnel
 ├── scripts/                 dev-up.sh / dev-pg.sh / dev-snapshot.sh (local PostgreSQL helpers)
 ├── data/                    dev-snapshot.dump — compact pg_dump used by dev-up.sh (optional)
 ├── docker-compose.yml       development stack (hot reload)
