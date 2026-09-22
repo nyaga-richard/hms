@@ -1,0 +1,54 @@
+'use client';
+import React, { Suspense, useEffect, useState } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { Plus, Undo2, BookOpen } from 'lucide-react';
+import { post } from '@/lib/api';
+import { useApi, useAction } from '@/lib/query';
+import { useAuth } from '@/lib/auth';
+import { PageHeader, KV } from '@/components/shared/page';
+import { DataTable } from '@/components/shared/data-table';
+import { Button } from '@/components/ui/button';
+import { StatusBadge, Badge } from '@/components/ui/badge';
+import { Modal } from '@/components/ui/dialog';
+import { Input, Label } from '@/components/ui/input';
+import { LookupSelect, ConfirmDialog } from '@/components/shared/form';
+import { AuditTrail } from '@/components/shared/audit-trail';
+import { fmtDate, fmtDateTime, fmtMoney, fmtNum, titleCase, today } from '@/lib/utils';
+
+const SOURCES = ['MANUAL', 'FOLIO', 'PAYMENT', 'POS_SALE', 'POS_REFUND', 'GRN', 'SUPPLIER_INVOICE', 'SUPPLIER_PAYMENT', 'STOCK_ISSUE', 'STOCK_ADJUSTMENT', 'WASTE', 'STOCKTAKE', 'EXPENSE', 'PETTY_CASH', 'INVOICE', 'CREDIT_NOTE', 'RECEIPT', 'NIGHT_AUDIT', 'CLUB_TICKET', 'EVENT', 'REVERSAL'];
+/** Manual journal: must balance; every line can carry department/outlet analysis. */
+function NewJournal({ open, onOpenChange, onCreated }: { open: boolean; onOpenChange: (o: boolean) => void; onCreated: (j: any) => void }) {
+  const { currency } = useAuth(); const [f, setF] = useState<any>({ description: '', entry_date: today(), reference: '' }); const [lines, setLines] = useState<any[]>([{ account_id: '', debit: '', credit: '', description: '', department_id: '' }, { account_id: '', debit: '', credit: '', description: '', department_id: '' }]);
+  const dr = lines.reduce((s, l) => s + Number(l.debit || 0), 0), cr = lines.reduce((s, l) => s + Number(l.credit || 0), 0); const balanced = Math.abs(dr - cr) < 0.005 && dr > 0;
+  const setL = (i: number, patch: any) => setLines(lines.map((l, j) => (j === i ? { ...l, ...patch } : l)));
+  const create = useAction(() => post('/journals', { ...f, reference: f.reference || null, lines: lines.filter((l) => l.account_id && (Number(l.debit) > 0 || Number(l.credit) > 0)).map((l) => ({ account_id: l.account_id, debit: Number(l.debit || 0), credit: Number(l.credit || 0), description: l.description || null, department_id: l.department_id || null })) }), { success: 'Journal posted', invalidate: ['/journals', '/accounts'], onSuccess: (j: any) => { onOpenChange(false); onCreated(j); } });
+  return <Modal open={open} onOpenChange={onOpenChange} title="Manual journal entry" size="xl"><div className="space-y-3">
+    <div className="grid grid-cols-4 gap-3"><div className="flex flex-col gap-1 col-span-2"><Label>Description</Label><Input value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} placeholder="Accrue September electricity" /></div><div className="flex flex-col gap-1"><Label>Entry date</Label><Input type="date" value={f.entry_date} onChange={(e) => setF({ ...f, entry_date: e.target.value })} /></div><div className="flex flex-col gap-1"><Label>Reference</Label><Input value={f.reference} onChange={(e) => setF({ ...f, reference: e.target.value })} /></div></div>
+    <table className="w-full text-sm"><thead className="text-xs uppercase text-muted-foreground"><tr><th className="text-left py-1 w-[35%]">Account</th><th className="text-left">Line memo</th><th className="text-left w-40">Department</th><th className="text-right w-32">Debit</th><th className="text-right w-32">Credit</th><th className="w-8" /></tr></thead><tbody>{lines.map((l, i) => <tr key={i}><td className="p-1"><LookupSelect source="/accounts" sourceQuery={{ header: 'false', active: 'true', pageSize: 500 }} sourceLabel={(a: any) => `${a.code} · ${a.name}`} value={l.account_id} onChange={(v) => setL(i, { account_id: v })} placeholder="Select account" /></td><td className="p-1"><Input value={l.description} onChange={(e) => setL(i, { description: e.target.value })} /></td><td className="p-1"><LookupSelect source="/departments" value={l.department_id} onChange={(v) => setL(i, { department_id: v })} placeholder="—" /></td><td className="p-1"><Input type="number" step="0.01" min={0} className="text-right" value={l.debit} onChange={(e) => setL(i, { debit: e.target.value, credit: e.target.value ? '' : l.credit })} /></td><td className="p-1"><Input type="number" step="0.01" min={0} className="text-right" value={l.credit} onChange={(e) => setL(i, { credit: e.target.value, debit: e.target.value ? '' : l.debit })} /></td><td><Button size="icon" variant="ghost" className="h-7 w-7" disabled={lines.length <= 2} onClick={() => setLines(lines.filter((_, j) => j !== i))}>×</Button></td></tr>)}</tbody><tfoot><tr className="border-t font-semibold"><td className="py-2" colSpan={3}><Button size="sm" variant="outline" onClick={() => setLines([...lines, { account_id: '', debit: '', credit: '', description: '', department_id: '' }])}>Add line</Button></td><td className="text-right tabular">{fmtMoney(dr, currency)}</td><td className="text-right tabular">{fmtMoney(cr, currency)}</td><td /></tr></tfoot></table>
+    <div className="flex items-center justify-between"><span className={`text-sm ${balanced ? 'text-emerald-600' : 'text-destructive'}`}>{balanced ? 'Balanced' : `Difference ${fmtMoney(dr - cr, currency)}`}</span><Button loading={create.isPending} disabled={!balanced || f.description.length < 3} onClick={() => create.mutate(undefined as any)}><BookOpen />Post journal</Button></div>
+  </div></Modal>;
+}
+export function JournalDetail({ id, onClose }: { id: string | null; onClose: () => void }) {
+  const { can, currency } = useAuth(); const { data: je, refetch } = useApi<any>(id ? `/journals/${id}` : null); const [rev, setRev] = useState(false);
+  const reverseM = useAction((v: any) => post(`/journals/${id}/reverse`, v), { success: 'Reversal posted', invalidate: ['/journals', '/accounts'], onSuccess: () => { setRev(false); refetch(); } });
+  if (!id) return null;
+  return <Modal open={!!id} onOpenChange={(o) => !o && onClose()} title={je ? <span className="flex items-center gap-2">{je.number} <StatusBadge status={je.status} /><Badge tone="muted">{titleCase(je.source_type)}</Badge></span> : 'Journal'} size="xl">{je && <div className="space-y-4">
+    <KV cols={4} items={[['Description', je.description], ['Entry date', fmtDate(je.entry_date)], ['Business date', fmtDate(je.business_date)], ['Posted', `${je.posted_by_name ?? ''} · ${fmtDateTime(je.posted_at ?? je.created_at)}`], ['Source', `${titleCase(je.source_type)}${je.source_id ? ` · ${String(je.source_id).slice(0, 8)}` : ''}`], ['Total', fmtMoney(je.total_debit, currency)], ['Reversed by', je.reversal ? `${je.reversal.number} (${fmtDate(je.reversal.entry_date)})` : '—'], ['Reverses', je.reverses ? `${je.reverses.number} (${fmtDate(je.reverses.entry_date)})` : '—']]} />
+    <table className="w-full text-sm"><thead className="text-xs uppercase text-muted-foreground"><tr><th className="text-left py-1">Account</th><th className="text-left">Memo</th><th className="text-left">Analysis</th><th className="text-right">Debit</th><th className="text-right">Credit</th></tr></thead><tbody className="divide-y">{(je.lines ?? []).map((l: any) => <tr key={l.id}><td className="py-1"><span className="text-muted-foreground mr-2">{l.account_code}</span>{l.account_name}<span className="text-xs text-muted-foreground"> · {titleCase(l.account_type)}</span></td><td className="text-xs">{l.description}</td><td className="text-xs text-muted-foreground">{[l.department_name, l.outlet_name, l.party_type && `${titleCase(l.party_type)} ${String(l.party_id ?? '').slice(0, 8)}`].filter(Boolean).join(' · ')}</td><td className="text-right tabular">{Number(l.debit) ? fmtNum(l.debit, 2) : ''}</td><td className="text-right tabular">{Number(l.credit) ? fmtNum(l.credit, 2) : ''}</td></tr>)}</tbody><tfoot><tr className="border-t font-semibold"><td className="py-2" colSpan={3}>Totals</td><td className="text-right tabular">{fmtNum(je.total_debit, 2)}</td><td className="text-right tabular">{fmtNum(je.total_credit, 2)}</td></tr></tfoot></table>
+    {je.status === 'POSTED' && !je.reversed_by_id && can('accounting.reverse') && <Button variant="outline" onClick={() => setRev(true)}><Undo2 />Reverse entry</Button>}
+    <AuditTrail entity="journal_entry" entityId={id} />
+    <ConfirmDialog open={rev} onOpenChange={setRev} title="Reverse journal entry" description="Journals are immutable: a mirror-image entry is posted and both are cross-linked." destructive confirmLabel="Post reversal" fields={[{ name: 'reason', label: 'Reason', required: true }, { name: 'entry_date', label: 'Reversal date (blank = today)', type: 'date' }]} onConfirm={(v) => reverseM.mutateAsync({ reason: v.reason, entry_date: v.entry_date || undefined })} />
+  </div>}</Modal>;
+}
+function JournalsInner() {
+  const { can } = useAuth(); const sp = useSearchParams(); const router = useRouter(); const [open, setOpen] = useState(false); const [sel, setSel] = useState<string | null>(null);
+  useEffect(() => { if (sp.get('id')) setSel(sp.get('id')); }, [sp]);
+  return <div className="space-y-4">
+    <PageHeader title="Journal entries" subtitle="Every financial event posts a balanced, immutable journal. Corrections are reversals, never edits." actions={can('accounting.post') && <Button onClick={() => setOpen(true)}><Plus />Manual journal</Button>} />
+    <DataTable path="/journals" defaultSort="created_at" onRowClick={(r) => setSel(r.id)} exportName="journals" filters={[{ key: 'source_type', label: 'Source', type: 'select', options: SOURCES }, { key: 'status', label: 'Status', type: 'select', options: ['POSTED', 'REVERSED'] }, { key: 'date', label: 'Entry date', type: 'daterange' }]}
+      columns={[{ key: 'number', label: 'No.' }, { key: 'entry_date', label: 'Date', type: 'date' }, { key: 'business_date', label: 'Biz date', type: 'date' }, { key: 'source_type', label: 'Source', render: (r) => <Badge tone="muted">{titleCase(r.source_type)}</Badge> }, { key: 'description', label: 'Description' }, { key: 'line_count', label: 'Lines', type: 'number', decimals: 0 }, { key: 'total_debit', label: 'Amount', type: 'money' }, { key: 'posted_by_name', label: 'Posted by' }, { key: 'status', label: 'Status', render: (r) => <span className="flex items-center gap-1"><StatusBadge status={r.status} />{r.reversed_by_id && <Badge tone="warning">reversed</Badge>}{r.reverses_id && <Badge tone="muted">reversal</Badge>}</span> }]} />
+    <NewJournal open={open} onOpenChange={setOpen} onCreated={(j) => setSel(j.id)} />
+    <JournalDetail id={sel} onClose={() => { setSel(null); if (sp.get('id')) router.replace('/finance/journals'); }} />
+  </div>;
+}
+export function JournalsPage() { return <Suspense fallback={null}><JournalsInner /></Suspense>; }

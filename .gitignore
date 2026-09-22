@@ -1,0 +1,13 @@
+node_modules/
+dist/
+.next/
+.env
+.env.local
+.pgdata/
+.pgrun/
+uploads/
+backups/
+*.log
+coverage/
+.cache/
+data/*.dump

@@ -1,0 +1,24 @@
+{
+  "name": "hms",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Hotel Management System - PMS, POS, Inventory, Procurement & Accounting ERP",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev -w backend",
+    "dev:frontend": "npm run dev -w frontend",
+    "migrate": "npm run migrate -w backend",
+    "seed": "npm run seed -w backend",
+    "test": "npm test -w backend",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "lint": "npm run lint -w frontend",
+    "start:backend": "npm start -w backend",
+    "start:frontend": "npm start -w frontend",
+    "docker:dev": "docker compose up --build",
+    "docker:prod": "docker compose -f docker-compose.prod.yml up -d --build"
+  }
+}

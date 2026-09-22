@@ -1,0 +1,15 @@
+# Build context hygiene (both Dockerfiles use the repo root as context)
+node_modules
+**/node_modules
+**/.next
+**/dist
+**/coverage
+.pgdata
+.pgrun
+uploads
+backups
+.env
+.env.*
+!.env.example
+*.log
+.git

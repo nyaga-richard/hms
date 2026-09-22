@@ -1,0 +1,91 @@
+import { LayoutDashboard, CalendarDays, BedDouble, Users, DoorOpen, Sparkles, Shirt, Wrench, UtensilsCrossed, Wine, PartyPopper, Warehouse, ShoppingCart, Receipt, Landmark, ClipboardCheck, BarChart3, Settings, Building2, Package, ConciergeBell, ChefHat, Boxes, Truck, Wallet, FileText, Shield, Bell, Search, CalendarClock, Briefcase, Flower2, Ticket, HardHat, ScrollText, Import, DatabaseBackup, BookOpen, type LucideIcon } from 'lucide-react';
+export interface NavItem { label: string; href: string; icon?: LucideIcon; perms?: string[]; children?: NavItem[] }
+/** Navigation per spec §71. `perms` = any-of. Items without perms are visible to everyone who is logged in. */
+export const NAV: NavItem[] = [
+  { label: 'Dashboard', href: '/', icon: LayoutDashboard, perms: ['dashboard.view'] },
+  { label: 'Front Office', href: '/front-office', icon: ConciergeBell, perms: ['reservations.view', 'checkin.create', 'checkout.create', 'guests.view'], children: [
+    { label: 'Front Desk', href: '/front-office', perms: ['reservations.view', 'checkin.create'] },
+    { label: 'Reservations', href: '/front-office/reservations', perms: ['reservations.view'] },
+    { label: 'Calendar', href: '/front-office/calendar', perms: ['reservations.view'] },
+    { label: 'Guests', href: '/front-office/guests', perms: ['guests.view'] },
+    { label: 'Folios', href: '/front-office/folios', perms: ['folios.view'] },
+    { label: 'Room Status', href: '/front-office/rooms', perms: ['rooms.view'] },
+    { label: 'Cashier Shifts', href: '/pos/shifts', perms: ['pos.open_shift', 'pos.close_shift', 'pos.approve_variance'] },
+  ] },
+  { label: 'Housekeeping', href: '/housekeeping', icon: Sparkles, perms: ['housekeeping.view'], children: [
+    { label: 'Room Board', href: '/housekeeping', perms: ['housekeeping.view'] },
+    { label: 'Tasks', href: '/housekeeping/tasks', perms: ['housekeeping.view'] },
+    { label: 'Laundry', href: '/housekeeping/laundry', perms: ['laundry.view'] },
+    { label: 'Room Items', href: '/housekeeping/room-items', perms: ['rooms.items'] },
+  ] },
+  { label: 'Maintenance', href: '/maintenance', icon: Wrench, perms: ['maintenance.view'], children: [
+    { label: 'Work Orders', href: '/maintenance', perms: ['maintenance.view'] },
+    { label: 'Assets', href: '/maintenance/assets', perms: ['assets.view'] },
+  ] },
+  { label: 'Restaurant & POS', href: '/pos', icon: UtensilsCrossed, perms: ['pos.view', 'kitchen.view', 'menus.view'], children: [
+    { label: 'POS', href: '/pos', perms: ['pos.view'] },
+    { label: 'Orders', href: '/pos/orders', perms: ['pos.view'] },
+    { label: 'Kitchen Display', href: '/pos/kitchen', perms: ['kitchen.view'] },
+    { label: 'Menus', href: '/pos/menus', perms: ['menus.view'] },
+    { label: 'Outlets & Tables', href: '/pos/outlets', perms: ['outlets.view'] },
+    { label: 'Cashier Shifts', href: '/pos/shifts', perms: ['pos.open_shift', 'pos.close_shift'] },
+  ] },
+  { label: 'Bars & Clubs', href: '/clubs', icon: Wine, perms: ['clubs.view', 'outlets.view'], children: [
+    { label: 'Club Nights & Tickets', href: '/clubs', perms: ['clubs.view'] },
+    { label: 'Recipes', href: '/inventory/recipes', perms: ['inventory.view', 'menus.manage'] },
+  ] },
+  { label: 'Events & Services', href: '/events', icon: PartyPopper, perms: ['events.view', 'services.view'], children: [
+    { label: 'Events & Banquets', href: '/events', perms: ['events.view'] },
+    { label: 'Venues', href: '/events/venues', perms: ['events.view'] },
+    { label: 'Spa & Services', href: '/services', perms: ['services.view'] },
+  ] },
+  { label: 'Inventory', href: '/inventory', icon: Warehouse, perms: ['inventory.view', 'products.view'], children: [
+    { label: 'Stock Levels', href: '/inventory', perms: ['inventory.view'] },
+    { label: 'Products', href: '/inventory/products', perms: ['products.view'] },
+    { label: 'Requisitions', href: '/inventory/requisitions', perms: ['requisitions.view'] },
+    { label: 'Transfers', href: '/inventory/transfers', perms: ['inventory.transfer', 'inventory.view'] },
+    { label: 'Adjustments & Waste', href: '/inventory/adjustments', perms: ['inventory.adjust', 'inventory.waste', 'inventory.view'] },
+    { label: 'Stocktakes', href: '/inventory/stocktakes', perms: ['inventory.stocktake', 'inventory.view'] },
+    { label: 'Stores', href: '/inventory/stores', perms: ['stores.view'] },
+    { label: 'Recipes', href: '/inventory/recipes', perms: ['inventory.view', 'menus.manage'] },
+  ] },
+  { label: 'Procurement', href: '/procurement', icon: ShoppingCart, perms: ['purchases.view', 'suppliers.view'], children: [
+    { label: 'Purchase Requisitions', href: '/procurement', perms: ['purchases.view'] },
+    { label: 'Purchase Orders', href: '/procurement/purchase-orders', perms: ['purchases.view'] },
+    { label: 'Goods Received', href: '/procurement/grns', perms: ['purchases.receive', 'purchases.view'] },
+    { label: 'Supplier Invoices', href: '/procurement/supplier-invoices', perms: ['payables.view', 'purchases.invoice'] },
+    { label: 'Supplier Payments', href: '/procurement/supplier-payments', perms: ['payables.view'] },
+    { label: 'Suppliers', href: '/procurement/suppliers', perms: ['suppliers.view'] },
+  ] },
+  { label: 'Finance', href: '/finance', icon: Landmark, perms: ['accounting.view', 'expenses.view', 'petty_cash.view', 'payments.view', 'receivables.view'], children: [
+    { label: 'Overview', href: '/finance', perms: ['accounting.view', 'reports.financial'] },
+    { label: 'Expenses', href: '/finance/expenses', perms: ['expenses.view'] },
+    { label: 'Petty Cash', href: '/finance/petty-cash', perms: ['petty_cash.view'] },
+    { label: 'Payments', href: '/finance/payments', perms: ['payments.view'] },
+    { label: 'Receivables', href: '/finance/receivables', perms: ['receivables.view'] },
+    { label: 'Journals', href: '/finance/journals', perms: ['accounting.view'] },
+    { label: 'Chart of Accounts', href: '/finance/accounts', perms: ['accounting.view'] },
+    { label: 'Night Audit', href: '/finance/night-audit', perms: ['accounting.night_audit'] },
+    { label: 'Periods & Taxes', href: '/finance/setup', perms: ['accounting.periods', 'settings.edit'] },
+  ] },
+  { label: 'Approvals', href: '/approvals', icon: ClipboardCheck, perms: ['approvals.view'] },
+  { label: 'Reports', href: '/reports', icon: BarChart3, perms: ['reports.view'] },
+  { label: 'HR & Staff', href: '/hr', icon: Briefcase, perms: ['employees.view'], children: [
+    { label: 'Employees', href: '/hr', perms: ['employees.view'] },
+    { label: 'Roster', href: '/hr/roster', perms: ['employees.view'] },
+  ] },
+  { label: 'Settings', href: '/settings', icon: Settings, perms: ['users.view', 'roles.view', 'settings.view', 'properties.view', 'room_types.view', 'audit.view', 'imports.run'], children: [
+    { label: 'Users', href: '/settings/users', perms: ['users.view'] },
+    { label: 'Roles & Permissions', href: '/settings/roles', perms: ['roles.view'] },
+    { label: 'Properties', href: '/settings/properties', perms: ['properties.view'] },
+    { label: 'Room Types & Rooms', href: '/settings/rooms', perms: ['room_types.view'] },
+    { label: 'Rates & Packages', href: '/settings/rates', perms: ['room_types.view'] },
+    { label: 'Departments', href: '/settings/departments', perms: ['departments.view'] },
+    { label: 'Approval Workflows', href: '/settings/workflows', perms: ['settings.workflows'] },
+    { label: 'Hotel Settings', href: '/settings/general', perms: ['settings.view'] },
+    { label: 'Data Import', href: '/settings/import', perms: ['imports.run'] },
+    { label: 'Audit Trail', href: '/settings/audit', perms: ['audit.view'] },
+    { label: 'Backups & System', href: '/settings/system', perms: ['settings.backup'] },
+  ] },
+];
+export const ICONS = { Building2, Package, ChefHat, Boxes, Truck, Wallet, FileText, Shield, Bell, Search, CalendarClock, CalendarDays, BedDouble, Users, DoorOpen, Shirt, Receipt, Flower2, Ticket, HardHat, ScrollText, Import, DatabaseBackup, BookOpen };
